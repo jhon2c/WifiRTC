@@ -7,16 +7,17 @@ WiFiManager wifiManager;
 WiFiServer server(80);
 
 
-//void reset_config(void) { // apaga memora rom do esp
-//  //Reset das definicoes de rede
-//  wifiManager.resetSettings();
-//  delay(1500);
-//  ESP.reset();
-//}
+/*
+    void reset_config(void) { // apaga memora rom do esp
+    wifiManager.resetSettings();
+    delay(1500);
+    ESP.reset();
+}
+*/
 
 //************* Função temporizada *************//
 int horaLiga = 00;
-int minutoLiga = 10;
+int minutoLiga = 15;
 int horaDesl = 00;
 int minutoDesl = 20;
 
@@ -31,11 +32,11 @@ uint8_t status_auto = false;  // define status do botão auto
 
 void TimedAction() {
   if (status_auto) {
-    if (hour() >= (int)horaLiga && minute() == (int)minutoLiga) {
+    if (hour() == (int)horaLiga && minute() == (int)minutoLiga) {
       digitalWrite(Relay, HIGH);
       status_gpio = 1;
       //reset_config();
-    } else if (hour() >= (int)horaDesl && minute() == (int)minutoDesl) {
+    } else if (hour() == (int)horaDesl && minute() == (int)minutoDesl) {
       digitalWrite(Relay, LOW);
       status_gpio = 0;
       //reset_config();
@@ -45,7 +46,7 @@ void TimedAction() {
 
 //******************** NTP *******************//
 static const char ntpServerName[] = "a.ntp.br"; //Servidor (pode ser a.ntp.br / b.ntp.br / c.ntp.br )
-const int timeZone = -4; // Insira o fuso horario
+const int timeZone = -4; // Fuso horario
 
 WiFiUDP Udp;
 unsigned int localPort = 8888;
@@ -152,54 +153,6 @@ void webpage() {
   }
   else if (req.indexOf(F("Auto_off")) != -1) {
     status_auto = false;
-  }if (req.indexOf("setHLu") != -1) {
-    horaLiga++;
-    if (horaLiga > 23){
-      horaLiga = 00;
-    }
-  }
-  else if (req.indexOf("setHLd") != -1) {
-    horaLiga--;
-    if (horaLiga < 00){
-      horaLiga = 23;
-    }
-  }
-  else if (req.indexOf("setMLu") != -1) {
-    minutoLiga = minutoLiga + 5;
-    if (minutoLiga > 59){
-    minutoLiga = 00;
-    }
-    
-  }
-  else if (req.indexOf("setMLd") != -1) {
-    minutoLiga = minutoLiga - 5;
-    if (minutoLiga < 0){
-    minutoLiga = 55;
-    }
-  }
-  else if (req.indexOf("setHDu") != -1) {
-    horaDesl++;
-    if (horaDesl > 23){
-      horaDesl = 00;
-    }
-  }
-  else if (req.indexOf("setHDd") != -1) {
-    horaDesl--;
-    if (horaDesl < 00){
-      horaDesl = 23;
-    }
-  }
-  else if (req.indexOf("setMDu") != -1) {
-    minutoDesl = minutoDesl + 5;
-    if (minutoDesl > 59){
-      minutoDesl = 00;
-    }
-  }
-  else if (req.indexOf("setMDd") != -1) {
-    minutoDesl = minutoDesl - 5;
-    if (minutoDesl < 00){
-      minutoDesl = 55;
-    }
   }
 #define stateRelay LOW //estado do pino Relay
   //Trata a string do cliente em busca de comandos
@@ -249,19 +202,7 @@ void webpage() {
     buf += "<a href=\"?function=rele_off\" class='btn btn-danger'><i class=\"fa fa-power-off\" aria-hidden=\"true\"></i> Desligar</a>";
   else
     buf += "<a href=\"?function=rele_on\" class='btn btn-success'><i class=\"fa fa-power-off\" aria-hidden=\"true\"></i> Ligar</a>";
-  buf += "</div><hr ";//btn group
-  buf += "<div class='btn-group'>";
-  buf += "<h4>Hora para ligar</h4>";
-  buf += "<a href=\"?function=setHLu\"><button type='button' class='btn btn-info' style='margin: 5px'>+1 h</button></a>";
-  buf += "<a href=\"?function=setHLd\"><button type='button' class='btn btn-info' style='margin: 5px'>-1 h</button></a>";
-  buf += "<a href=\"?function=setMLu\"><button type='button' class='btn btn-info' style='margin: 5px'>+5 min</button></a>";
-  buf += "<a href=\"?function=setMLd\"><button type='button' class='btn btn-info' style='margin: 5px'>-5 min</button></a>";
-  buf += "<h4>Hora para desligar</h4>";
-  buf += "<a href=\"?function=setHDu\"><button type='button' class='btn btn-info' style='margin: 5px'>+1 h</button></a>";
-  buf += "<a href=\"?function=setHDd\"><button type='button' class='btn btn-info' style='margin: 5px'>-1 h</button></a>";
-  buf += "<a href=\"?function=setMDu\"><button type='button' class='btn btn-info' style='margin: 5px'>+5 min</button></a>";
-  buf += "<a href=\"?function=setMDd\"><button type='button' class='btn btn-info' style='margin: 5px'>-5 min</button></a>";
-  buf += "</div> ";
+  buf += "</div>";//btn group
   buf += "<p>Programado para ligar &#224;s <span class=\"label label-success\">";
   buf += String(horaLigar);
   buf += "</span> e desligar &#224;s <span class=\"label label-danger\">";
