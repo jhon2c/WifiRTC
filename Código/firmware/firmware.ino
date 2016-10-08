@@ -1,18 +1,20 @@
-#include <ESP8266WiFi.h>
-#include <TimeLib.h>
+#include <ESP8266WiFi.h>  //https://github.com/ekstrand/ESP8266wifi
 #include <WiFiUdp.h>
-#include <WiFiManager.h>
+#include <WiFiManager.h>  //https://github.com/tzapu/WiFiManager
+#include <TimeLib.h>      //https://github.com/PaulStoffregen/Time
+#include <Ticker.h>
 
 WiFiManager wifiManager;
 WiFiServer server(80);
-
+Ticker secondtick;
+volatile int watchdogCount = 0;
 
 /*
     void reset_config(void) { // apaga memora rom do esp
     wifiManager.resetSettings();
     delay(1500);
     ESP.reset();
-}
+  }
 */
 
 //************* Função temporizada *************//
@@ -32,15 +34,21 @@ uint8_t status_auto = false;  // define status do botão auto
 
 void TimedAction() {
   if (status_auto) {
-    if (hour() == (int)horaLiga && minute() == (int)minutoLiga) {
+    if (int(hour()) == (int)horaLiga && int(minute()) == (int)minutoLiga) {
       digitalWrite(Relay, HIGH);
       status_gpio = 1;
-      //reset_config();
-    } else if (hour() == (int)horaDesl && minute() == (int)minutoDesl) {
+    } else if (int(hour()) == (int)horaDesl && int(minute()) == (int)minutoDesl) {
       digitalWrite(Relay, LOW);
       status_gpio = 0;
-      //reset_config();
     }
+  }
+}
+
+void ISRWatchdog(){
+  watchdogCount++;
+  if (watchdogCount > 30){
+    Serial.println("Watchdog bite!");
+    ESP.reset();
   }
 }
 
@@ -50,18 +58,14 @@ const int timeZone = -4; // Fuso horario
 
 WiFiUDP Udp;
 unsigned int localPort = 8888;
-
 time_t getNtpTime();
-
 void sendNTPpacket(IPAddress &address);
-
 const int NTP_PACKET_SIZE = 48;
 byte packetBuffer[NTP_PACKET_SIZE];
 
 time_t getNtpTime()
 {
   IPAddress ntpServerIP;
-
   while (Udp.parsePacket() > 0) ;
   Serial.println(F("Transmitindo NTP Request"));
   WiFi.hostByName(ntpServerName, ntpServerIP);
@@ -70,7 +74,7 @@ time_t getNtpTime()
   Serial.println(ntpServerIP);
   sendNTPpacket(ntpServerIP);
   uint32_t beginWait = millis();
-  while (millis() - beginWait < 1500) {
+  while (millis() - beginWait < 3000) {
     int size = Udp.parsePacket();
     if (size >= NTP_PACKET_SIZE) {
       Serial.println(F("Resposta recebida do NTP"));
@@ -114,58 +118,76 @@ void RTCSoft() {
 }
 
 void VerifyTimeNow() {
-
-  sprintf( hora, "%02d:%02d:%02d", hour(), minute(), second());// concatena os valores h,m,s
+  sprintf( hora, "%02d:%02d:%02d", hour(), minute(), second());
   sprintf( horaLigar, "%02d:%02d", horaLiga, minutoLiga);
   sprintf( horaDesligar, "%02d:%02d", horaDesl, minutoDesl);
-  // Serial.println(hora);
 }
 
 ///******************************************
 void webpage() {
- // timeStatus();
-  VerifyTimeNow();
-  //Aguarda uma nova conexao
   WiFiClient client = server.available();
   if (!client) {
     return;
   }
-
   Serial.println(F("Nova conexao requisitada..."));
-
   while (!client.available()) {
     delay(1);
   }
-
   Serial.println (F("Nova conexao OK..."));
-
-  //Le a string enviada pelo cliente
-  String req = client.readStringUntil('\r');
-  //Mostra a string enviada
-  Serial.println(req);
-  //Limpa dados/buffer
-  client.flush();
-
-  //Trata a string do cliente em busca de comandos automaticos por hora
+  String req = client.readStringUntil('\r'); //Le a string enviada pelo cliente
+  Serial.println(req);  //Mostra a string enviada
+  client.flush();       //Limpa dados/buffer
+  #define stateRelay LOW //estado do pino Relay
 
   if (req.indexOf(F("Auto_on")) != -1) {
     status_auto = true;
-  }
-  else if (req.indexOf(F("Auto_off")) != -1) {
+  } else if (req.indexOf(F("Auto_off")) != -1) {
     status_auto = false;
-  }
-#define stateRelay LOW //estado do pino Relay
-  //Trata a string do cliente em busca de comandos
-  if (req.indexOf(F("rele_on")) != -1) {
+  } else if (req.indexOf(F("setHLu")) != -1) {
+    horaLiga++; if (horaLiga > 23) {
+      horaLiga = 00;
+    }
+  } else if (req.indexOf(F("setHLd")) != -1) {
+    horaLiga--; if (horaLiga < 00) {
+      horaLiga = 23;
+    }
+  } else if (req.indexOf(F("setMLu")) != -1) {
+    minutoLiga = minutoLiga + 5;
+    if (minutoLiga > 59) {
+      minutoLiga = 00;
+    }
+  } else if (req.indexOf(F("setMLd")) != -1) {
+    minutoLiga = minutoLiga - 5;
+    if (minutoLiga < 0) {
+      minutoLiga = 55;
+    }
+  } else if (req.indexOf(F("setHDu")) != -1) {
+    horaDesl++;
+    if (horaDesl > 23) {
+      horaDesl = 00;
+    }
+  } else if (req.indexOf(F("setHDd")) != -1) {
+    horaDesl--;
+    if (horaDesl < 00) {
+      horaDesl = 23;
+    }
+  } else if (req.indexOf(F("setMDu")) != -1) {
+    minutoDesl = minutoDesl + 5;
+    if (minutoDesl > 59) {
+      minutoDesl = 00;
+    }
+  } else if (req.indexOf(F("setMDd")) != -1) {
+    minutoDesl = minutoDesl - 5;
+    if (minutoDesl < 00) {
+      minutoDesl = 55;
+    }
+  } else if (req.indexOf(F("rele_on")) != -1) {
     digitalWrite(Relay, !stateRelay);
     status_gpio = 1;
-    //reset_config();// inseri o reset aqui descomenta ele e é só apertar led liga para resetar
   } else if (req.indexOf(F("rele_off")) != -1) {
     digitalWrite(Relay, stateRelay);
     status_gpio = 0;
-  }
-
-  else {
+  } else {
     Serial.println(F("Requisicao invalida"));
   }
 
@@ -185,9 +207,9 @@ void webpage() {
   buf += "</head>";
   buf += "<body onload='startTime()'><div class=\"panel panel-primary\">";
   buf += "<div class=\"panel-heading\"><h3>ESP8266 Web NTP</h3></div>";
-    buf += "<div class=\"panel-body\">";
+  buf += "<div class=\"panel-body\">";
   buf += "<div id=\"txt\" style=\"font-weight:bold;\"></div></br>"; // DIV para hora
-  buf+= String(hora);
+  buf += String(hora);
   //********botão lampada varanda**************
   buf += "<div class='container'>";
   buf += "<h4>Lampada da varanda</h4>";
@@ -208,12 +230,22 @@ void webpage() {
   buf += "</span> e desligar &#224;s <span class=\"label label-danger\">";
   buf += String(horaDesligar);
   buf += "</span></p></br>";
+  buf += (F("<div class='btn-group'>"));
+  buf += (F("<h4>Hora para ligar</h4>"));
+  buf += (F("<a href=\"?function=setHLu\"><button type='button' class='btn btn-info' style='margin: 5px'>+1 h</button></a>"));
+  buf += (F("<a href=\"?function=setHLd\"><button type='button' class='btn btn-info' style='margin: 5px'>-1 h</button></a>"));
+  buf += (F("<a href=\"?function=setMLu\"><button type='button' class='btn btn-info' style='margin: 5px'>+5 min</button></a>"));
+  buf += (F("<a href=\"?function=setMLd\"><button type='button' class='btn btn-info' style='margin: 5px'>-5 min</button></a>"));
+  buf += (F("<h4>Hora para desligar</h4>"));
+  buf += (F("<a href=\"?function=setHDu\"><button type='button' class='btn btn-info' style='margin: 5px'>+1 h</button></a>"));
+  buf += (F("<a href=\"?function=setHDd\"><button type='button' class='btn btn-info' style='margin: 5px'>-1 h</button></a>"));
+  buf += (F("<a href=\"?function=setMDu\"><button type='button' class='btn btn-info' style='margin: 5px'>+5 min</button></a>"));
+  buf += (F("<a href=\"?function=setMDd\"><button type='button' class='btn btn-info' style='margin: 5px'>-5 min</button></a>"));
+  buf += (F("</div> "));
   buf += "</div></div> ";//container
   //************************************
   buf += "</body>";
   buf += "</html>\n";
-
-  //Envia a resposta para o cliente
   VerifyTimeNow();
   client.print(buf);
   VerifyTimeNow();
@@ -222,16 +254,13 @@ void webpage() {
   Serial.println(F("Cliente desconectado!"));
 }
 
-void setup() // ***************************Setup********************
-{
+void setup() {
   WiFi.persistent(false);
   Serial.begin(115200);
   delay(250);
-  Serial.println("");
-  //Configura a GPIO como saida
   pinMode(Relay, OUTPUT);
-  //Coloca a GPIO em sinal logico baixo
   digitalWrite(Relay, LOW);
+  secondtick.attach(1, ISRWatchdog);
 
   //Define o auto connect e o SSID do modo AP
   wifiManager.setConfigPortalTimeout(180);
@@ -246,11 +275,9 @@ void setup() // ***************************Setup********************
   //************************hostname Config******************
   //#define HOSTNAME "ESP100"
   //String hostname(HOSTNAME);
-
   //wifi_station_set_hostname(strToChar(hostname));
 
   //********************NTP********************************
-  //  Serial.println(" ");
   Serial.print("IP: ");
   Serial.println(WiFi.localIP());
   Serial.println(F("Iniciando UDP"));
@@ -263,11 +290,8 @@ void setup() // ***************************Setup********************
 
 }
 
-void loop()//*******************************loop***********
-{
-  RTCSoft();//sincroniza o relógio
-  webpage();//carrega o webserver
+void loop() {
+  watchdogCount = 0;
+  RTCSoft();  //sincroniza o relógio
+  webpage();  //carrega o webserver
 }
-
-
-
