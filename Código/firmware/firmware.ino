@@ -10,7 +10,7 @@ Ticker secondtick;
 volatile int watchdogCount = 0;
 
 /*
-    void reset_config(void) { // apaga memora rom do esp
+    void reset_config(void) { // apaga rom do esp
     wifiManager.resetSettings();
     delay(1500);
     ESP.reset();
@@ -54,7 +54,7 @@ void ISRWatchdog(){
 
 //******************** NTP *******************//
 static const char ntpServerName[] = "a.ntp.br"; //Servidor (pode ser a.ntp.br / b.ntp.br / c.ntp.br )
-const int timeZone = -4; // Fuso horario
+const int timeZone = -2; // Fuso horario (-3 Padrão / -2 Horário de Verão)
 
 WiFiUDP Udp;
 unsigned int localPort = 8888;
@@ -208,11 +208,11 @@ void webpage() {
   buf += "<body onload='startTime()'><div class=\"panel panel-primary\">";
   buf += "<div class=\"panel-heading\"><h3>ESP8266 Web NTP</h3></div>";
   buf += "<div class=\"panel-body\">";
-  buf += "<div id=\"txt\" style=\"font-weight:bold;\"></div></br>"; // DIV para hora
+  buf += "<div id=\"txt\" style=\"font-weight:bold;\"></div></br><p>Pagina atualizada as "; // DIV para hora
   buf += String(hora);
   //********botão lampada varanda**************
-  buf += "<div class='container'>";
-  buf += "<h4>Lampada da varanda</h4>";
+  buf += "</p><div class='container'>";
+  buf += "<h4>Lampada</h4>";
   buf += "<div class='btn-group'>";
   //verificar como deixar automatico envia o comando
   if (status_auto)  // alterna botões on off
