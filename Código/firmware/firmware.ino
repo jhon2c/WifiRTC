@@ -30,15 +30,15 @@ char horaDesligar[10];
 int Relay = 5;                // Pino Utilizado
 uint8_t status_gpio = 0;      // define condição para gpio
 uint8_t status_auto = false;  // define status do botão auto
-#define stateRelay LOW        //estado do pino Relay
+boolean stateRelay;           //estado do pino Relay = 0
 
 void TimedAction() {
   if (status_auto) {
     if (int(hour()) == (int)horaLiga && int(minute()) == (int)minutoLiga) {
-      digitalWrite(Relay, HIGH);
+      digitalWrite(Relay, !stateRelay);
       status_gpio = 1;
     } else if (int(hour()) == (int)horaDesl && int(minute()) == (int)minutoDesl) {
-      digitalWrite(Relay, LOW);
+      digitalWrite(Relay, stateRelay);
       status_gpio = 0;
     }
   }
@@ -137,7 +137,7 @@ void webpage() {
   String req = client.readStringUntil('\r'); //Le a string enviada pelo cliente
   Serial.println(req);  //Mostra a string enviada
   client.flush();       //Limpa dados/buffer
-  #define stateRelay LOW //estado do pino Relay
+  
 
   if (req.indexOf(F("Auto_on")) != -1) {
     status_auto = true;
@@ -208,8 +208,7 @@ void webpage() {
   buf += "<body onload='startTime()'><div class=\"panel panel-primary\">";
   buf += "<div class=\"panel-heading\"><h3>ESP8266 Web NTP</h3></div>";
   buf += "<div class=\"panel-body\">";
-  buf += "<div id=\"txt\" style=\"font-weight:bold;\"></div></br><p>Pagina atualizada as "; // DIV para hora
-  buf += String(hora);
+  buf += "<div id=\"txt\" style=\"font-weight:bold;\"></div>";
   //********botão lampada varanda**************
   buf += "</p><div class='container'>";
   buf += "<h4>Lampada</h4>";
@@ -244,6 +243,8 @@ void webpage() {
   buf += (F("</div> "));
   buf += "</div></div> ";//container
   //************************************
+  buf += "<p>Pagina atualizada as "; // DIV para hora
+  buf += String(hora);
   buf += "</body>";
   buf += "</html>\n";
   VerifyTimeNow();
@@ -259,7 +260,7 @@ void setup() {
   Serial.begin(115200);
   delay(250);
   pinMode(Relay, OUTPUT);
-  digitalWrite(Relay, LOW);
+  digitalWrite(Relay, !stateRelay);
   secondtick.attach(1, ISRWatchdog);
 
   //Define o auto connect e o SSID do modo AP
@@ -276,7 +277,6 @@ void setup() {
   //#define HOSTNAME "ESP100"
   //String hostname(HOSTNAME);
   //wifi_station_set_hostname(strToChar(hostname));
-
   //********************NTP********************************
   Serial.print("IP: ");
   Serial.println(WiFi.localIP());
