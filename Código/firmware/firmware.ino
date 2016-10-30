@@ -10,7 +10,7 @@ Ticker secondtick;
 volatile int watchdogCount = 0;
 
 /*
-    void reset_config(void) { // apaga rom do esp
+    void reset_config(void) { // apaga memora rom do esp
     wifiManager.resetSettings();
     delay(1500);
     ESP.reset();
@@ -54,7 +54,7 @@ void ISRWatchdog(){
 
 //******************** NTP *******************//
 static const char ntpServerName[] = "a.ntp.br"; //Servidor (pode ser a.ntp.br / b.ntp.br / c.ntp.br )
-const int timeZone = -2; // Fuso horario (-3 Padrão / -2 Horário de Verão)
+const int timeZone = -4; // Fuso horario
 
 WiFiUDP Udp;
 unsigned int localPort = 8888;
@@ -210,7 +210,7 @@ void webpage() {
   buf += "<div class=\"panel-body\">";
   buf += "<div id=\"txt\" style=\"font-weight:bold;\"></div>";
   //********botão lampada varanda**************
-  buf += "</p><div class='container'>";
+  buf += "<div class='container'>";
   buf += "<h4>Lampada</h4>";
   buf += "<div class='btn-group'>";
   //verificar como deixar automatico envia o comando
