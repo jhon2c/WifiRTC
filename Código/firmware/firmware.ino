@@ -1,60 +1,110 @@
 #include <ESP8266WiFi.h>  //https://github.com/ekstrand/ESP8266wifi
 #include <WiFiUdp.h>
-#include <WiFiManager.h>  //https://github.com/tzapu/WiFiManager
+//#include <WiFiManager.h>  //https://github.com/tzapu/WiFiManager
 #include <TimeLib.h>      //https://github.com/PaulStoffregen/Time
 #include <Ticker.h>
+#include <EEPROM.h>
 
-WiFiManager wifiManager;
+
+//******************** Configurações Gerais *******************//
+
+const char* ssid = "SSID";
+const char* password = "SENHA";
+
 WiFiServer server(80);
 Ticker secondtick;
 volatile int watchdogCount = 0;
 
-/*
-    void reset_config(void) { // apaga memora rom do esp
-    wifiManager.resetSettings();
-    delay(1500);
-    ESP.reset();
-  }
-*/
+int Relay = 5;                // Pino Utilizado
+uint8_t status_gpio = 0;      // Define condição para GPIO
+uint8_t status_auto;          // Define status do botão auto
+boolean stateRelay;           // Estado do pino Relay
 
-//************* Função temporizada *************//
-int horaLiga = 00;
-int minutoLiga = 15;
-int horaDesl = 00;
-int minutoDesl = 20;
+void reset_config(void) {
+  Serial.println("*WifiRTC: O ESP ira resetar agora");
+  delay(1500);
+  ESP.reset();
+}
+void GPIO_handler(){
+  if(digitalRead(Relay) != stateRelay){
+    digitalWrite(Relay, stateRelay);
+    Serial.println("*WifiRTC: Estado da GPIO mudou ");
+  }
+}
+
+//******************** Função Temporizada *******************//
+int  horaLiga;
+int  minutoLiga;
+int  horaDesl;
+int  minutoDesl;
 
 char hora[30];
 char horaLigar[10];
 char horaDesligar[10];
 
-int Relay = 5;                // Pino Utilizado
-uint8_t status_gpio = 0;      // define condição para gpio
-uint8_t status_auto = false;  // define status do botão auto
-boolean stateRelay;           //estado do pino Relay = 0
-
-void TimedAction() {
+void TimedAction() {  //executa
   if (status_auto) {
     if (int(hour()) == (int)horaLiga && int(minute()) == (int)minutoLiga) {
-      digitalWrite(Relay, !stateRelay);
+      stateRelay = true;
       status_gpio = 1;
     } else if (int(hour()) == (int)horaDesl && int(minute()) == (int)minutoDesl) {
-      digitalWrite(Relay, stateRelay);
+      stateRelay = false;
       status_gpio = 0;
-    }
+    }GPIO_handler();
   }
 }
 
-void ISRWatchdog(){
+//******************** Watchdog *******************//
+void ISRWatchdog() {
   watchdogCount++;
-  if (watchdogCount > 30){
-    Serial.println("Watchdog bite!");
-    ESP.reset();
+  if (watchdogCount > 30) {
+    Serial.println("*WifiRTC: Watchdog bite! Reiniciando");
+    //ESP.reset();
+    ESP.restart();
   }
+}
+
+//******************** EEPROM *******************//
+// Endereços reservados na memória
+uint8_t addr = 6;    // horaliga
+uint8_t addr1 = 7;   // minutoLiga
+uint8_t addr2 = 8;   // horaDesl
+uint8_t addr3 = 9;   // minutoDesl
+uint8_t addr4 = 10;  // stateRelay
+uint8_t addr5 = 11;  // status_auto
+//uint8_t addr5 = 12;  // First Run Status
+
+// Funções para gerenciamento
+void Clear_Data() {
+  Serial.println("*WifiRTC: Limpando EEPROM!");
+  for (int i = 0; i <= 255; i++) {
+    EEPROM.write(i, 0);
+    EEPROM.end();
+  }Serial.println("*WifiRTC: EEPROM apagada!");
+}
+void Read_Data(){
+  horaLiga = EEPROM.read(addr);
+  minutoLiga = EEPROM.read(addr1);
+  horaDesl = EEPROM.read(addr2);
+  minutoDesl = EEPROM.read(addr3);
+  stateRelay = EEPROM.read(addr4);
+  status_auto = EEPROM.read(addr5);
+  Serial.println("*WifiRTC: Dados lidos da EEPROM");
+}
+void Save_Data(){
+  EEPROM.write(addr, (byte) horaLiga);
+  EEPROM.write(addr1, (byte) minutoLiga);
+  EEPROM.write(addr2, (byte) horaDesl);
+  EEPROM.write(addr3, (byte) minutoDesl);
+  EEPROM.write(addr4, (byte) stateRelay);
+  EEPROM.write(addr5, (byte) status_auto);
+  EEPROM.commit();
+  Serial.println("*WifiRTC: Dados salvos na EEPROM");
 }
 
 //******************** NTP *******************//
 static const char ntpServerName[] = "a.ntp.br"; //Servidor (pode ser a.ntp.br / b.ntp.br / c.ntp.br )
-const int timeZone = -4; // Fuso horario
+const int timeZone = -2; // Fuso horario (-3 Padrão / -2 Horário de Verão)
 
 WiFiUDP Udp;
 unsigned int localPort = 8888;
@@ -67,7 +117,7 @@ time_t getNtpTime()
 {
   IPAddress ntpServerIP;
   while (Udp.parsePacket() > 0) ;
-  Serial.println(F("Transmitindo NTP Request"));
+  Serial.println(F("*WifiRTC: Transmitindo NTP Request"));
   WiFi.hostByName(ntpServerName, ntpServerIP);
   Serial.print(ntpServerName);
   Serial.print(": ");
@@ -77,7 +127,7 @@ time_t getNtpTime()
   while (millis() - beginWait < 3000) {
     int size = Udp.parsePacket();
     if (size >= NTP_PACKET_SIZE) {
-      Serial.println(F("Resposta recebida do NTP"));
+      Serial.println(F("*WifiRTC: Resposta recebida do NTP"));
       Udp.read(packetBuffer, NTP_PACKET_SIZE);
       unsigned long secsSince1900;
       secsSince1900 =  (unsigned long)packetBuffer[40] << 24;
@@ -87,7 +137,7 @@ time_t getNtpTime()
       return secsSince1900 - 2208988800UL + timeZone * SECS_PER_HOUR;
     }
   }
-  Serial.println("Sem resposta do NTP");
+  Serial.println("*WifiRTC: Sem resposta do NTP");
   return 0;
 }
 
@@ -108,6 +158,7 @@ void sendNTPpacket(IPAddress &address)
 }
 time_t prevDisplay = 0;
 
+//******************** RTC *******************//
 void RTCSoft() {
   if (timeStatus() != timeNotSet) {
     if (now() != prevDisplay) {
@@ -117,27 +168,28 @@ void RTCSoft() {
   }
 }
 
+//******************** Verificação das horas *******************//
 void VerifyTimeNow() {
+  Serial.println("*WifiRTC: Checking all hours");
   sprintf( hora, "%02d:%02d:%02d", hour(), minute(), second());
   sprintf( horaLigar, "%02d:%02d", horaLiga, minutoLiga);
   sprintf( horaDesligar, "%02d:%02d", horaDesl, minutoDesl);
 }
 
-///******************************************
+//******************** Página WEB *******************//
 void webpage() {
   WiFiClient client = server.available();
   if (!client) {
     return;
   }
-  Serial.println(F("Nova conexao requisitada..."));
+  Serial.println(F("*WifiRTC: Nova conexao requisitada..."));
   while (!client.available()) {
     delay(1);
   }
-  Serial.println (F("Nova conexao OK..."));
-  String req = client.readStringUntil('\r'); //Le a string enviada pelo cliente
-  Serial.println(req);  //Mostra a string enviada
-  client.flush();       //Limpa dados/buffer
-  
+  Serial.println (F("*WifiRTC: Nova conexao OK..."));
+  String req = client.readStringUntil('\r');  //Le a string enviada pelo cliente
+  Serial.println(req);                        //Mostra a string enviada
+  client.flush();                             //Limpa dados/buffer
 
   if (req.indexOf(F("Auto_on")) != -1) {
     status_auto = true;
@@ -182,16 +234,24 @@ void webpage() {
       minutoDesl = 55;
     }
   } else if (req.indexOf(F("rele_on")) != -1) {
-    digitalWrite(Relay, !stateRelay);
+    stateRelay = true;
     status_gpio = 1;
   } else if (req.indexOf(F("rele_off")) != -1) {
-    digitalWrite(Relay, stateRelay);
+    stateRelay = false;
     status_gpio = 0;
-  } else {
-    Serial.println(F("Requisicao invalida"));
-  }
 
+  } else if (req.indexOf(F("clear")) != -1) {
+ //   reset_config();
+  Clear_Data();
+  } else {
+    Serial.println(F("*WifiRTC: Requisicao invalida"));
+  }
+  GPIO_handler();
+  
+  // Verifica a hora atual e salva as configurações na EEPROM
   VerifyTimeNow();
+  Save_Data();
+  
   //Prepara a resposta para o cliente e carrega a pagina
   String buf = "";
   buf += "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<!DOCTYPE HTML>\r\n";
@@ -210,7 +270,7 @@ void webpage() {
   buf += "<div class=\"panel-body\">";
   buf += "<div id=\"txt\" style=\"font-weight:bold;\"></div>";
   //********botão lampada varanda**************
-  buf += "<div class='container'>";
+  buf += "</p><div class='container'>";
   buf += "<h4>Lampada</h4>";
   buf += "<div class='btn-group'>";
   //verificar como deixar automatico envia o comando
@@ -241,7 +301,9 @@ void webpage() {
   buf += (F("<a href=\"?function=setMDu\"><button type='button' class='btn btn-info' style='margin: 5px'>+5 min</button></a>"));
   buf += (F("<a href=\"?function=setMDd\"><button type='button' class='btn btn-info' style='margin: 5px'>-5 min</button></a>"));
   buf += (F("</div> "));
-  buf += "</div></div> ";//container
+  buf += "</div>";//container
+  buf += (F("<a href=\"?function=clear\"><button type='button' class='btn btn-info' style='margin: 5px'>clear</button></a>"));
+  buf += "</div> ";
   //************************************
   buf += "<p>Pagina atualizada as "; // DIV para hora
   buf += String(hora);
@@ -252,46 +314,53 @@ void webpage() {
   VerifyTimeNow();
   client.flush();
   client.stop();
-  Serial.println(F("Cliente desconectado!"));
+  Serial.println(F("*WifiRTC: Cliente desconectado!"));
+
 }
 
 void setup() {
   WiFi.persistent(false);
   Serial.begin(115200);
+
+  //***EEPROM***
+  EEPROM.begin(256);
+  Read_Data();
   delay(250);
+  
   pinMode(Relay, OUTPUT);
-  digitalWrite(Relay, !stateRelay);
+  digitalWrite(Relay, stateRelay);
   secondtick.attach(1, ISRWatchdog);
-
-  //Define o auto connect e o SSID do modo AP
-  wifiManager.setConfigPortalTimeout(180);
-  wifiManager.autoConnect("ESPWebServer");
-
+  
+  //Define conexão direta
+  WiFi.begin(ssid, password);
+  
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
-  Serial.println(F("Conectado"));
+
+  while (WiFi.waitForConnectResult() != WL_CONNECTED) {
+    Serial.println(F("*WifiRTC: Falha na conexão! Reiniciando..."));
+    delay(5000);
+    ESP.restart();
+  }
+
+  Serial.println(F("*WifiRTC: Conectado"));
   server.begin();
-  //************************hostname Config******************
-  //#define HOSTNAME "ESP100"
-  //String hostname(HOSTNAME);
-  //wifi_station_set_hostname(strToChar(hostname));
-  //********************NTP********************************
+
   Serial.print("IP: ");
   Serial.println(WiFi.localIP());
-  Serial.println(F("Iniciando UDP"));
+  Serial.println(F("*WifiRTC: Iniciando UDP"));
   Udp.begin(localPort);
-  Serial.print(F("Porta local: "));
+  Serial.print(F("*WifiRTC: Porta local: "));
   Serial.println(Udp.localPort());
-  Serial.println(F("Aguardando sincronia do NTP"));
+  Serial.println(F("*WifiRTC: Aguardando sincronia com o servidor NTP"));
   setSyncProvider(getNtpTime);
-  setSyncInterval(300);
-
+  setSyncInterval(300);     // Intervalo de sincronia com servidor (Padrão: 300)(segundos)
 }
 
 void loop() {
-  watchdogCount = 0;
-  RTCSoft();  //sincroniza o relógio
-  webpage();  //carrega o webserver
+  watchdogCount = 0;        //Zera Watchdog
+  RTCSoft();                //sincroniza o relógio
+  webpage();                //carrega o webserver
 }
