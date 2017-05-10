@@ -1,7 +1,7 @@
 # Controlador WiFiRTC
 Acionamentos temporizados com RTC via Software utilizando o ESP8266 e NTP
 
-![Interface](https://raw.githubusercontent.com/jhon2c/WifiRTC/master/Interface.PNG)
+![Interface](https://raw.githubusercontent.com/jhon2c/WifiRTC/master/Docs/Imagens/Interface.PNG)
 
 * Realizar acionamentos em horários definidos pelo usuário de forma automatizada.
 * Dispensa o uso de RTC.
